@@ -1,12 +1,39 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { Zap } from 'lucide-react'
+import { Zap, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
+    const navigate = useNavigate()
     const [email, setEmail] = useState('')
     const [sent, setSent] = useState(false)
     const [loading, setLoading] = useState(false)
+    const [checking, setChecking] = useState(true)
     const [error, setError] = useState<string | null>(null)
+
+    // ── Auto-redirect if valid session already exists ──────────
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (session?.user) {
+                // Fetch role and redirect accordingly
+                const { data } = await supabase
+                    .from('users')
+                    .select('role')
+                    .eq('id', session.user.id)
+                    .single()
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const role = (data as any)?.role as string | null
+                if (role === 'coach') navigate('/dashboard', { replace: true })
+                else if (role === 'athlete') navigate('/athlete/dashboard', { replace: true })
+                else if (role === 'parent') navigate('/parent/dashboard', { replace: true })
+                else navigate('/onboarding', { replace: true })
+            } else {
+                setChecking(false)
+            }
+        }
+        void checkSession()
+    }, [navigate])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -27,6 +54,20 @@ export default function LoginPage() {
             setSent(true)
             setLoading(false)
         }
+    }
+
+    // ── Loading state while checking existing session ──────────
+    if (checking) {
+        return (
+            <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-[#C8F000] flex items-center justify-center">
+                        <Zap className="w-7 h-7 text-[#0D0D0D]" strokeWidth={2.5} />
+                    </div>
+                    <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+                </div>
+            </div>
+        )
     }
 
     return (

@@ -2,7 +2,7 @@
 // SELF App — Supabase Database Types
 // ============================================================
 
-export type Role = 'coach' | 'athlete' | 'parent'
+export type Role = 'coach' | 'athlete' | 'parent' | 'pending'
 export type AthleteStatus = 'active' | 'inactive' | 'injured'
 export type EventType = 'Lift' | 'Practice' | 'Game' | 'Meeting' | 'Event'
 export type AttendanceStatus = 'present' | 'late' | 'absent'

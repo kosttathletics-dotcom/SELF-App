@@ -5,10 +5,11 @@ import {
     ArrowLeft, Edit2, FileText, Trash2, ExternalLink,
     Instagram, Twitter, Youtube, Link as LinkIcon, Zap,
     AlertTriangle, GraduationCap, Trophy, ClipboardList, Apple, StickyNote,
-    Dumbbell
+    Dumbbell, Mail
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { AthleteForm } from '@/components/athletes/AthleteForm'
+import { InviteModal } from '@/components/athletes/InviteModal'
 import { EligibilityTab } from '@/components/eligibility/EligibilityTab'
 import { Avatar } from '@/components/shared/Avatar'
 import { Badge } from '@/components/shared/Badge'
@@ -42,6 +43,7 @@ export default function AthleteProfilePage() {
     const [loading, setLoading] = useState(true)
     const [tab, setTab] = useState<Tab>('overview')
     const [showEdit, setShowEdit] = useState(false)
+    const [showInviteParent, setShowInviteParent] = useState(false)
 
     const load = useCallback(async () => {
         if (!id) return
@@ -113,6 +115,14 @@ export default function AthleteProfilePage() {
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowInviteParent(true)}
+                                    title="Invite Parent"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2A2A2A] text-white/60 text-xs hover:bg-[#3A3A3A] hover:text-white transition-colors"
+                                >
+                                    <Mail className="w-3 h-3" />
+                                    <span className="hidden sm:inline">Invite Parent</span>
+                                </button>
                                 <button
                                     onClick={() => setShowEdit(true)}
                                     className="w-8 h-8 rounded-lg bg-[#2A2A2A] flex items-center justify-center hover:bg-[#3A3A3A] transition-colors"
@@ -201,6 +211,15 @@ export default function AthleteProfilePage() {
                     athlete={athlete}
                     onClose={() => setShowEdit(false)}
                     onSaved={() => { setShowEdit(false); void load() }}
+                />
+            )}
+
+            {showInviteParent && (
+                <InviteModal
+                    role="parent"
+                    athleteId={athlete.id}
+                    athleteName={athlete.name}
+                    onClose={() => setShowInviteParent(false)}
                 />
             )}
         </AppShell>

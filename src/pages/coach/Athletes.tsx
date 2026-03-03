@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Search, Filter, Upload } from 'lucide-react'
+import { Plus, Search, Filter, Upload, Mail } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { AthleteCard } from '@/components/athletes/AthleteCard'
 import { AthleteForm } from '@/components/athletes/AthleteForm'
+import { InviteModal } from '@/components/athletes/InviteModal'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
@@ -21,6 +22,7 @@ export default function AthletesPage() {
     const [filterSport, setFilterSport] = useState('All')
     const [filterStatus, setFilterStatus] = useState('All')
     const [showForm, setShowForm] = useState(false)
+    const [showInvite, setShowInvite] = useState(false)
     const [gpaMap, setGpaMap] = useState<Record<string, number>>({})
     const [injurySet, setInjurySet] = useState<Set<string>>(new Set())
 
@@ -81,6 +83,13 @@ export default function AthletesPage() {
                     <p className="text-white/40 text-sm mt-0.5">{athletes.length} athletes</p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setShowInvite(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] border border-[#2A2A2A] text-white/70 font-heading font-bold rounded-xl text-sm hover:border-[#C8F000]/40 hover:text-white active:scale-95 transition-all"
+                    >
+                        <Mail className="w-4 h-4" strokeWidth={2} />
+                        <span className="hidden sm:inline">Invite Athlete</span>
+                    </button>
                     <button
                         onClick={() => setShowForm(true)}
                         className="flex items-center gap-2 px-4 py-2.5 bg-[#C8F000] text-[#0D0D0D] font-heading font-bold rounded-xl text-sm hover:bg-[#d4f520] active:scale-95 transition-all"
@@ -176,6 +185,13 @@ export default function AthletesPage() {
                 <AthleteForm
                     onClose={() => setShowForm(false)}
                     onSaved={() => { setShowForm(false); void load() }}
+                />
+            )}
+
+            {showInvite && (
+                <InviteModal
+                    role="athlete"
+                    onClose={() => { setShowInvite(false); void load() }}
                 />
             )}
         </AppShell>
