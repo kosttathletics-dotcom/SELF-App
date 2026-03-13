@@ -14,6 +14,14 @@ interface AthleteCardProps {
 export function AthleteCard({ athlete, gpa, hasActiveInjury, complianceRate }: AthleteCardProps) {
     const statusVariant = athlete.status === 'active' ? 'success' : athlete.status === 'injured' ? 'error' : 'default'
 
+    // Use grades-table GPA if available, otherwise fall back to the athlete.gpa field
+    const displayGpa = gpa ?? (athlete.gpa != null ? Number(athlete.gpa) : null)
+
+    // Build subtitle parts: sport · position · class of YYYY
+    const subtitleParts = [athlete.sport, athlete.position].filter(Boolean)
+    if (athlete.graduation_year) subtitleParts.push(`Class of ${athlete.graduation_year}`)
+    else if (athlete.grade) subtitleParts.push(athlete.grade)
+
     return (
         <Link
             to={`/athletes/${athlete.id}`}
@@ -32,18 +40,17 @@ export function AthleteCard({ athlete, gpa, hasActiveInjury, complianceRate }: A
                     </div>
 
                     <p className="text-white/50 text-xs mt-0.5">
-                        {[athlete.sport, athlete.position].filter(Boolean).join(' · ')}
-                        {athlete.grade ? ` · ${athlete.grade}` : ''}
+                        {subtitleParts.join(' · ')}
                     </p>
 
                     {/* Metrics row */}
                     <div className="flex items-center gap-3 mt-3 flex-wrap">
-                        {gpa !== null && gpa !== undefined && (
+                        {displayGpa !== null && displayGpa !== undefined && (
                             <div className="flex items-center gap-1">
-                                <span className={`text-xs font-medium ${gpa < 2.5 ? 'text-[#FF4444]' : 'text-white/60'}`}>
-                                    GPA {gpa.toFixed(2)}
+                                <span className={`text-xs font-medium ${displayGpa < 2.5 ? 'text-[#FF4444]' : 'text-white/60'}`}>
+                                    GPA {displayGpa.toFixed(2)}
                                 </span>
-                                {gpa < 2.5 && <AlertTriangle className="w-3 h-3 text-[#FF4444]" />}
+                                {displayGpa < 2.5 && <AlertTriangle className="w-3 h-3 text-[#FF4444]" />}
                             </div>
                         )}
                         {complianceRate !== null && complianceRate !== undefined && (

@@ -1,20 +1,24 @@
 import { useState, useEffect } from 'react'
-import { X, Upload } from 'lucide-react'
+import { X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import type { Athlete } from '@/types/database'
 import { cn } from '@/lib/utils'
 
 const SPORTS = ['Football', 'Basketball', 'Baseball', 'Soccer', 'Volleyball', 'Track', 'Wrestling', 'Swimming', 'Lacrosse', 'Other']
-const GRADES = ['6th', '7th', '8th', '9th - Freshman', '10th - Sophomore', '11th - Junior', '12th - Senior']
-const AGE_GROUPS = ['Middle School', 'JV', 'Varsity', 'College']
+
 const POSITIONS: Record<string, string[]> = {
-    Football: ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P', 'LS'],
+    Football: ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'DB', 'K', 'P', 'LS', 'ATH'],
     Basketball: ['PG', 'SG', 'SF', 'PF', 'C'],
     Baseball: ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'],
     Soccer: ['GK', 'CB', 'FB', 'MF', 'FW', 'CF'],
+    Volleyball: ['Setter', 'Outside', 'Middle', 'Opposite', 'Libero'],
     Other: [],
 }
+
+// Generate graduation years: current year through +8
+const currentYear = new Date().getFullYear()
+const GRAD_YEARS = Array.from({ length: 9 }, (_, i) => String(currentYear + i))
 
 interface AthleteFormProps {
     athlete?: Athlete
@@ -26,23 +30,30 @@ type FormData = {
     name: string
     sport: string
     position: string
-    grade: string
-    age_group: string
+    graduation_year: string
     height: string
     weight: string
+    gpa: string
     status: string
     notes: string
-    hudl_url: string
-    instagram: string
-    twitter: string
-    tiktok: string
-    recruiting_url: string
+    parent_name: string
+    parent_email: string
+    parent_phone: string
 }
 
 const defaultForm: FormData = {
-    name: '', sport: '', position: '', grade: '', age_group: '',
-    height: '', weight: '', status: 'active', notes: '',
-    hudl_url: '', instagram: '', twitter: '', tiktok: '', recruiting_url: '',
+    name: '',
+    sport: 'Football',
+    position: '',
+    graduation_year: '',
+    height: '',
+    weight: '',
+    gpa: '',
+    status: 'active',
+    notes: '',
+    parent_name: '',
+    parent_email: '',
+    parent_phone: '',
 }
 
 export function AthleteForm({ athlete, onClose, onSaved }: AthleteFormProps) {
@@ -50,25 +61,23 @@ export function AthleteForm({ athlete, onClose, onSaved }: AthleteFormProps) {
     const [form, setForm] = useState<FormData>(defaultForm)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [tab, setTab] = useState<'info' | 'digital'>('info')
+    const [tab, setTab] = useState<'info' | 'parent'>('info')
 
     useEffect(() => {
         if (athlete) {
             setForm({
                 name: athlete.name ?? '',
-                sport: athlete.sport ?? '',
+                sport: athlete.sport ?? 'Football',
                 position: athlete.position ?? '',
-                grade: athlete.grade ?? '',
-                age_group: athlete.age_group ?? '',
+                graduation_year: athlete.graduation_year ?? '',
                 height: athlete.height ?? '',
                 weight: athlete.weight ?? '',
+                gpa: athlete.gpa != null ? String(athlete.gpa) : '',
                 status: athlete.status ?? 'active',
                 notes: athlete.notes ?? '',
-                hudl_url: athlete.hudl_url ?? '',
-                instagram: athlete.instagram ?? '',
-                twitter: athlete.twitter ?? '',
-                tiktok: athlete.tiktok ?? '',
-                recruiting_url: athlete.recruiting_url ?? '',
+                parent_name: athlete.parent_name ?? '',
+                parent_email: athlete.parent_email ?? '',
+                parent_phone: athlete.parent_phone ?? '',
             })
         }
     }, [athlete])
@@ -83,7 +92,22 @@ export function AthleteForm({ athlete, onClose, onSaved }: AthleteFormProps) {
         setLoading(true)
         setError(null)
 
-        const payload = { ...form, coach_id: user.id }
+        // Build the payload — only send non-empty strings, convert gpa to number
+        const payload: Record<string, unknown> = {
+            name: form.name,
+            sport: form.sport || null,
+            position: form.position || null,
+            graduation_year: form.graduation_year || null,
+            height: form.height || null,
+            weight: form.weight || null,
+            gpa: form.gpa ? parseFloat(form.gpa) : null,
+            status: form.status,
+            notes: form.notes || null,
+            parent_name: form.parent_name || null,
+            parent_email: form.parent_email || null,
+            parent_phone: form.parent_phone || null,
+            coach_id: user.id,
+        }
 
         let err
         if (athlete) {
@@ -115,10 +139,10 @@ export function AthleteForm({ athlete, onClose, onSaved }: AthleteFormProps) {
 
                 {/* Tabs */}
                 <div className="flex border-b border-[#2A2A2A] flex-shrink-0">
-                    {(['info', 'digital'] as const).map(t => (
+                    {(['info', 'parent'] as const).map(t => (
                         <button key={t} onClick={() => setTab(t)}
                             className={cn('flex-1 py-2.5 text-sm font-medium transition-colors', tab === t ? 'text-[#C8F000] border-b-2 border-[#C8F000]' : 'text-white/40 hover:text-white/70')}>
-                            {t === 'info' ? 'Basic Info' : 'Digital Presence'}
+                            {t === 'info' ? 'Athlete Info' : 'Parent / Guardian'}
                         </button>
                     ))}
                 </div>
@@ -127,19 +151,13 @@ export function AthleteForm({ athlete, onClose, onSaved }: AthleteFormProps) {
                     <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
                         {tab === 'info' ? (
                             <>
-                                {/* Photo upload placeholder */}
-                                <div className="flex justify-center mb-2">
-                                    <div className="w-20 h-20 rounded-full bg-[#0D0D0D] border-2 border-dashed border-[#2A2A2A] flex flex-col items-center justify-center cursor-pointer hover:border-[#C8F000]/50 transition-colors">
-                                        <Upload className="w-5 h-5 text-white/30" />
-                                        <span className="text-[10px] text-white/30 mt-1">Photo</span>
-                                    </div>
-                                </div>
-
+                                {/* Name */}
                                 <div>
                                     <label className={labelCls}>Full Name *</label>
                                     <input className={inputCls} required value={form.name} onChange={e => set('name', e.target.value)} placeholder="Marcus Johnson" />
                                 </div>
 
+                                {/* Sport + Position */}
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className={labelCls}>Sport</label>
@@ -150,35 +168,42 @@ export function AthleteForm({ athlete, onClose, onSaved }: AthleteFormProps) {
                                     </div>
                                     <div>
                                         <label className={labelCls}>Position</label>
-                                        <select className={selectCls} value={form.position} onChange={e => set('position', e.target.value)}>
-                                            <option value="">Select position</option>
-                                            {positionOptions.length > 0
-                                                ? positionOptions.map(p => <option key={p}>{p}</option>)
-                                                : <option value={form.position}>{form.position || 'Custom'}</option>}
-                                        </select>
-                                        {positionOptions.length === 0 && (
-                                            <input className={cn(inputCls, 'mt-1')} value={form.position} onChange={e => set('position', e.target.value)} placeholder="Enter position" />
+                                        {positionOptions.length > 0 ? (
+                                            <select className={selectCls} value={form.position} onChange={e => set('position', e.target.value)}>
+                                                <option value="">Select position</option>
+                                                {positionOptions.map(p => <option key={p}>{p}</option>)}
+                                            </select>
+                                        ) : (
+                                            <input className={inputCls} value={form.position} onChange={e => set('position', e.target.value)} placeholder="Enter position" />
                                         )}
                                     </div>
                                 </div>
 
+                                {/* Graduation Year + GPA */}
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className={labelCls}>Grade</label>
-                                        <select className={selectCls} value={form.grade} onChange={e => set('grade', e.target.value)}>
-                                            <option value="">Select grade</option>
-                                            {GRADES.map(g => <option key={g}>{g}</option>)}
+                                        <label className={labelCls}>Graduation Year</label>
+                                        <select className={selectCls} value={form.graduation_year} onChange={e => set('graduation_year', e.target.value)}>
+                                            <option value="">Select year</option>
+                                            {GRAD_YEARS.map(y => <option key={y}>{y}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className={labelCls}>Level</label>
-                                        <select className={selectCls} value={form.age_group} onChange={e => set('age_group', e.target.value)}>
-                                            <option value="">Select level</option>
-                                            {AGE_GROUPS.map(a => <option key={a}>{a}</option>)}
-                                        </select>
+                                        <label className={labelCls}>GPA</label>
+                                        <input
+                                            className={inputCls}
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            max="5.0"
+                                            value={form.gpa}
+                                            onChange={e => set('gpa', e.target.value)}
+                                            placeholder="3.50"
+                                        />
                                     </div>
                                 </div>
 
+                                {/* Height + Weight */}
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className={labelCls}>Height (e.g. 6'2")</label>
@@ -190,6 +215,7 @@ export function AthleteForm({ athlete, onClose, onSaved }: AthleteFormProps) {
                                     </div>
                                 </div>
 
+                                {/* Status */}
                                 <div>
                                     <label className={labelCls}>Status</label>
                                     <div className="flex gap-2">
@@ -207,26 +233,30 @@ export function AthleteForm({ athlete, onClose, onSaved }: AthleteFormProps) {
                                     </div>
                                 </div>
 
+                                {/* Notes */}
                                 <div>
                                     <label className={labelCls}>Notes</label>
-                                    <textarea className={cn(inputCls, 'resize-none')} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Coach notes..." />
+                                    <textarea className={cn(inputCls, 'resize-none')} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Coach notes about this athlete..." />
                                 </div>
                             </>
                         ) : (
                             <>
-                                <p className="text-white/40 text-xs mb-2">These links appear on the athlete's recruiting profile and report.</p>
-                                {[
-                                    { key: 'hudl_url', label: 'HUDL URL', placeholder: 'https://hudl.com/profile/...' },
-                                    { key: 'instagram', label: 'Instagram', placeholder: '@username' },
-                                    { key: 'twitter', label: 'Twitter / X', placeholder: '@username' },
-                                    { key: 'tiktok', label: 'TikTok', placeholder: '@username' },
-                                    { key: 'recruiting_url', label: 'Recruiting Profile URL', placeholder: 'https://247sports.com/...' },
-                                ].map(({ key, label, placeholder }) => (
-                                    <div key={key}>
-                                        <label className={labelCls}>{label}</label>
-                                        <input className={inputCls} value={form[key as keyof FormData]} onChange={e => set(key as keyof FormData, e.target.value)} placeholder={placeholder} />
-                                    </div>
-                                ))}
+                                <p className="text-white/40 text-xs mb-2">Parent or guardian contact info. This will be visible on the athlete's profile.</p>
+
+                                <div>
+                                    <label className={labelCls}>Parent / Guardian Name</label>
+                                    <input className={inputCls} value={form.parent_name} onChange={e => set('parent_name', e.target.value)} placeholder="Robert Johnson" />
+                                </div>
+
+                                <div>
+                                    <label className={labelCls}>Parent Email</label>
+                                    <input className={inputCls} type="email" value={form.parent_email} onChange={e => set('parent_email', e.target.value)} placeholder="parent@email.com" />
+                                </div>
+
+                                <div>
+                                    <label className={labelCls}>Parent Phone</label>
+                                    <input className={inputCls} type="tel" value={form.parent_phone} onChange={e => set('parent_phone', e.target.value)} placeholder="(555) 123-4567" />
+                                </div>
                             </>
                         )}
                     </div>

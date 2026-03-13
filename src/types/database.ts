@@ -35,12 +35,17 @@ export interface Athlete {
     sport: string | null
     position: string | null
     grade: string | null
+    graduation_year: string | null
     age_group: string | null
     height: string | null
     weight: string | null
+    gpa: number | null
     photo_url: string | null
     status: AthleteStatus
     notes: string | null
+    parent_name: string | null
+    parent_email: string | null
+    parent_phone: string | null
     hudl_url: string | null
     instagram: string | null
     twitter: string | null

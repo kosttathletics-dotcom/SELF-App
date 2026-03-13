@@ -5,6 +5,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { StatCard } from '@/components/shared/StatCard'
 import { Badge } from '@/components/shared/Badge'
 import { Avatar } from '@/components/shared/Avatar'
+import { AthleteForm } from '@/components/athletes/AthleteForm'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { format, startOfWeek, endOfWeek, isToday, parseISO } from 'date-fns'
@@ -48,6 +49,7 @@ export default function CoachDashboard() {
     const [recentPRs, setRecentPRs] = useState<PREntry[]>([])
     const [upcomingEvents, setUpcomingEvents] = useState<EventEntry[]>([])
     const [loading, setLoading] = useState(true)
+    const [showAthleteForm, setShowAthleteForm] = useState(false)
 
     useEffect(() => {
         if (user) void loadDashboard(user.id)
@@ -162,13 +164,13 @@ export default function CoachDashboard() {
 
             {/* Quick Actions */}
             <div className="flex flex-wrap gap-3 mb-8">
-                <Link
-                    to="/athletes"
+                <button
+                    onClick={() => setShowAthleteForm(true)}
                     className="flex items-center gap-2 px-4 py-2.5 bg-[#C8F000] text-[#0D0D0D] font-heading font-semibold rounded-xl text-sm hover:bg-[#d4f520] active:scale-95 transition-all"
                 >
                     <Plus className="w-4 h-4" strokeWidth={2.5} />
                     Add Athlete
-                </Link>
+                </button>
                 <Link
                     to="/training"
                     className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] border border-[#2A2A2A] text-white font-medium rounded-xl text-sm hover:border-[#C8F000]/40 hover:text-[#C8F000] active:scale-95 transition-all"
@@ -318,6 +320,13 @@ export default function CoachDashboard() {
                     </div>
                 </div>
             </div>
+
+            {showAthleteForm && (
+                <AthleteForm
+                    onClose={() => setShowAthleteForm(false)}
+                    onSaved={() => { setShowAthleteForm(false); if (user) void loadDashboard(user.id) }}
+                />
+            )}
         </AppShell>
     )
 }
