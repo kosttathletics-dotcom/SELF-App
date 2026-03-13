@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Search, Library, Dumbbell, ChevronDown, LayoutTemplate, Trash2, Copy } from 'lucide-react'
+import { Plus, Search, Library, Dumbbell, ChevronDown, LayoutTemplate, Trash2 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Badge } from '@/components/shared/Badge'
