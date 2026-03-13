@@ -88,7 +88,7 @@ export default function AthletesPage() {
                         className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] border border-[#2A2A2A] text-white/70 font-heading font-bold rounded-xl text-sm hover:border-[#C8F000]/40 hover:text-white active:scale-95 transition-all"
                     >
                         <Mail className="w-4 h-4" strokeWidth={2} />
-                        <span className="hidden sm:inline">Invite Athlete</span>
+                        <span className="hidden sm:inline">Invite via Email</span>
                     </button>
                     <button
                         onClick={() => setShowForm(true)}
