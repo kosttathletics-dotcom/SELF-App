@@ -1,10 +1,12 @@
+import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
     LayoutDashboard, Users, Dumbbell, GraduationCap,
     MessageCircle, Calendar, Settings, Zap, LogOut,
-    Trophy, ClipboardList, Apple,
+    Trophy, ClipboardList, Apple, ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 const coachNav = [
@@ -15,6 +17,7 @@ const coachNav = [
     { to: '/attendance', icon: ClipboardList, label: 'Attendance' },
     { to: '/messages', icon: MessageCircle, label: 'Messages' },
     { to: '/calendar', icon: Calendar, label: 'Calendar' },
+    { to: '/team-access', icon: ShieldCheck, label: 'Team Access' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
@@ -40,8 +43,19 @@ const parentNav = [
 export function Sidebar() {
     const { role, user, signOut } = useAuth()
     const navigate = useNavigate()
+    const [pendingCount, setPendingCount] = useState(0)
 
     const navItems = role === 'coach' ? coachNav : role === 'athlete' ? athleteNav : parentNav
+
+    // Fetch pending approval count for coaches
+    useEffect(() => {
+        if (role !== 'coach') return
+        supabase.from('users')
+            .select('id', { count: 'exact', head: true })
+            .in('role', ['athlete', 'parent'])
+            .eq('approved', false)
+            .then(({ count }) => setPendingCount(count ?? 0))
+    }, [role])
 
     const handleSignOut = async () => {
         await signOut()
@@ -74,7 +88,12 @@ export function Sidebar() {
                         }
                     >
                         <item.icon className="w-4 h-4 flex-shrink-0" />
-                        {item.label}
+                        <span className="flex-1">{item.label}</span>
+                        {item.to === '/team-access' && pendingCount > 0 && (
+                            <span className="min-w-[18px] h-[18px] bg-[#F4A261] rounded-full flex items-center justify-center text-[#0D0D0D] text-[9px] font-bold px-1">
+                                {pendingCount}
+                            </span>
+                        )}
                     </NavLink>
                 ))}
             </nav>

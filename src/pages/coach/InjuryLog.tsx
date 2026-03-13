@@ -4,7 +4,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Badge } from '@/components/shared/Badge'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
-import { format, parseISO, differenceInDays } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { cn } from '@/lib/utils'
 
 interface Injury {
@@ -13,21 +13,23 @@ interface Injury {
     athlete_name?: string
     type: string
     body_part: string | null
-    severity: 'minor' | 'moderate' | 'severe'
+    severity: 'Minor' | 'Moderate' | 'Severe'
     date: string
-    return_date: string | null
-    status: 'active' | 'recovering' | 'cleared'
+    symptoms: string | null
+    restrictions: string | null
+    status: 'active' | 'healing' | 'cleared'
     notes: string | null
+    photo_url: string | null
 }
 
 interface AthleteOption { id: string; name: string }
 
 const BODY_PARTS = ['Head/Neck', 'Shoulder', 'Elbow', 'Wrist/Hand', 'Back', 'Hip', 'Quad', 'Hamstring', 'Knee', 'Ankle', 'Foot', 'Groin', 'Calf', 'Other']
-const INJURY_TYPES = ['Sprain', 'Strain', 'Fracture', 'Contusion', 'Concussion', 'Tear', 'Soreness', 'Other']
+const INJURY_TYPES = ['Strain', 'Sprain', 'Fracture', 'Concussion', 'Other']
 const SEVERITIES: { value: Injury['severity']; label: string; color: string }[] = [
-    { value: 'minor', label: 'Minor', color: '#F4A261' },
-    { value: 'moderate', label: 'Moderate', color: '#F97316' },
-    { value: 'severe', label: 'Severe', color: '#FF4444' },
+    { value: 'Minor', label: 'Minor', color: '#F4A261' },
+    { value: 'Moderate', label: 'Moderate', color: '#F97316' },
+    { value: 'Severe', label: 'Severe', color: '#FF4444' },
 ]
 
 interface InjuryFormState {
@@ -36,7 +38,7 @@ interface InjuryFormState {
     body_part: string
     severity: Injury['severity']
     date: string
-    return_date: string
+    restrictions: string
     notes: string
 }
 
@@ -45,29 +47,30 @@ export default function InjuryLog() {
     const [injuries, setInjuries] = useState<Injury[]>([])
     const [athletes, setAthletes] = useState<AthleteOption[]>([])
     const [loading, setLoading] = useState(true)
-    const [filter, setFilter] = useState<'all' | 'active' | 'recovering' | 'cleared'>('active')
+    const [filter, setFilter] = useState<'all' | 'active' | 'healing' | 'cleared'>('active')
     const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [form, setForm] = useState<InjuryFormState>({
         athlete_id: '', type: 'Sprain', body_part: 'Knee',
-        severity: 'minor', date: format(new Date(), 'yyyy-MM-dd'),
-        return_date: '', notes: ''
+        severity: 'Minor', date: format(new Date(), 'yyyy-MM-dd'),
+        restrictions: '', notes: ''
     })
     const [saving, setSaving] = useState(false)
     const set = (k: keyof InjuryFormState, v: string) => setForm(f => ({ ...f, [k]: v }))
 
     const load = useCallback(async () => {
         if (!user) return
-        const [injRes, athRes] = await Promise.all([
-            supabase.from('injuries').select('*, athletes(name)')
-                .eq('coach_id', user.id)
-                .order('date', { ascending: false }),
-            supabase.from('athletes').select('id, name').eq('coach_id', user.id).order('name'),
-        ])
+        const { data: coachAthletes } = await supabase.from('athletes').select('id, name').eq('coach_id', user.id).order('name')
+        setAthletes((coachAthletes ?? []) as unknown as AthleteOption[])
+        const athleteIds = (coachAthletes ?? []).map(a => (a as unknown as { id: string }).id)
+        if (athleteIds.length === 0) { setLoading(false); return }
+
+        const injRes = await supabase.from('injuries').select('*, athletes(name)')
+            .in('athlete_id', athleteIds)
+            .order('date', { ascending: false })
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const raw = (injRes.data ?? []) as any[]
         setInjuries(raw.map(r => ({ ...r, athlete_name: r.athletes?.name ?? 'Unknown' } as Injury)))
-        setAthletes((athRes.data ?? []) as unknown as AthleteOption[])
         setLoading(false)
     }, [user])
 
@@ -76,21 +79,26 @@ export default function InjuryLog() {
     const openEdit = (inj: Injury) => {
         setForm({
             athlete_id: inj.athlete_id, type: inj.type, body_part: inj.body_part ?? '',
-            severity: inj.severity, date: inj.date, return_date: inj.return_date ?? '', notes: inj.notes ?? ''
+            severity: inj.severity, date: inj.date, restrictions: inj.restrictions ?? '', notes: inj.notes ?? ''
         })
         setEditingId(inj.id)
         setShowForm(true)
     }
 
-    const clearForm = () => { setForm({ athlete_id: '', type: 'Sprain', body_part: 'Knee', severity: 'minor', date: format(new Date(), 'yyyy-MM-dd'), return_date: '', notes: '' }); setEditingId(null); setShowForm(false) }
+    const clearForm = () => { setForm({ athlete_id: '', type: 'Sprain', body_part: 'Knee', severity: 'Minor', date: format(new Date(), 'yyyy-MM-dd'), restrictions: '', notes: '' }); setEditingId(null); setShowForm(false) }
 
     const saveInjury = async () => {
         if (!user || !form.athlete_id) return
         setSaving(true)
         const payload = {
-            ...form, coach_id: user.id,
-            return_date: form.return_date || null, notes: form.notes || null,
-            body_part: form.body_part || null, status: 'active',
+            athlete_id: form.athlete_id,
+            type: form.type,
+            body_part: form.body_part || null,
+            severity: form.severity,
+            date: form.date,
+            restrictions: form.restrictions || null,
+            notes: form.notes || null,
+            status: 'active' as const,
         }
         if (editingId) {
             await supabase.from('injuries').update(payload as never).eq('id', editingId)
@@ -184,15 +192,14 @@ export default function InjuryLog() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs text-white/50 mb-1">Date</label>
-                            <input type="date" className={inputCls} value={form.date} onChange={e => set('date', e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-white/50 mb-1">Est. Return Date</label>
-                            <input type="date" className={inputCls} value={form.return_date} onChange={e => set('return_date', e.target.value)} />
-                        </div>
+                    <div>
+                        <label className="block text-xs text-white/50 mb-1">Date</label>
+                        <input type="date" className={inputCls} value={form.date} onChange={e => set('date', e.target.value)} />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs text-white/50 mb-1">Restrictions</label>
+                        <input className={inputCls} value={form.restrictions} onChange={e => set('restrictions', e.target.value)} placeholder="e.g. No contact, limited practice..." />
                     </div>
 
                     <div>
@@ -213,7 +220,7 @@ export default function InjuryLog() {
 
             {/* Filter */}
             <div className="flex gap-2 mb-4">
-                {(['active', 'recovering', 'cleared', 'all'] as const).map(s => (
+                {(['active', 'healing', 'cleared', 'all'] as const).map(s => (
                     <button key={s} onClick={() => setFilter(s)}
                         className={cn('px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-all',
                             filter === s ? 'bg-[#C8F000] text-[#0D0D0D]' : 'bg-[#1A1A1A] border border-[#2A2A2A] text-white/50')}>
@@ -235,28 +242,25 @@ export default function InjuryLog() {
             ) : (
                 <div className="space-y-3">
                     {filtered.map(inj => {
-                        const daysOut = inj.return_date ? differenceInDays(parseISO(inj.return_date), new Date()) : null
                         return (
                             <div key={inj.id} className={cn('bg-[#1A1A1A] border rounded-2xl p-4',
-                                inj.status === 'active' ? 'border-[#FF4444]/20' : inj.status === 'recovering' ? 'border-[#F4A261]/20' : 'border-[#2A2A2A]')}>
+                                inj.status === 'active' ? 'border-[#FF4444]/20' : inj.status === 'healing' ? 'border-[#F4A261]/20' : 'border-[#2A2A2A]')}>
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 flex-wrap mb-1">
                                             <span className="font-heading font-bold text-white">{inj.athlete_name}</span>
-                                            <Badge variant={inj.status === 'active' ? 'error' : inj.status === 'recovering' ? 'warning' : 'success'}>
+                                            <Badge variant={inj.status === 'active' ? 'error' : inj.status === 'healing' ? 'warning' : 'success'}>
                                                 {inj.status}
                                             </Badge>
-                                            <Badge variant={inj.severity === 'severe' ? 'error' : inj.severity === 'moderate' ? 'warning' : 'default'}>
+                                            <Badge variant={inj.severity === 'Severe' ? 'error' : inj.severity === 'Moderate' ? 'warning' : 'default'}>
                                                 {inj.severity}
                                             </Badge>
                                         </div>
                                         <p className="text-white/70 text-sm">{inj.type} — {inj.body_part ?? 'Unknown'}</p>
                                         <div className="flex items-center gap-3 mt-1.5 text-xs text-white/30">
                                             <span>Injured: {format(parseISO(inj.date), 'MMM d, yyyy')}</span>
-                                            {inj.return_date && (
-                                                <span className={cn(daysOut !== null && daysOut < 0 ? 'text-[#C8F000]' : 'text-[#F4A261]')}>
-                                                    {daysOut !== null && daysOut < 0 ? '✓ Return date passed' : `Est. return: ${format(parseISO(inj.return_date), 'MMM d')}`}
-                                                </span>
+                                            {inj.restrictions && (
+                                                <span className="text-[#F4A261]">Restrictions: {inj.restrictions}</span>
                                             )}
                                         </div>
                                         {inj.notes && <p className="text-white/30 text-xs mt-1.5 line-clamp-2">{inj.notes}</p>}
@@ -269,9 +273,9 @@ export default function InjuryLog() {
                                 {inj.status !== 'cleared' && (
                                     <div className="flex gap-2 mt-3 pt-3 border-t border-[#2A2A2A]">
                                         {inj.status === 'active' && (
-                                            <button onClick={() => void updateStatus(inj.id, 'recovering')}
+                                            <button onClick={() => void updateStatus(inj.id, 'healing')}
                                                 className="flex-1 py-1.5 text-xs font-medium bg-[#F4A261]/10 text-[#F4A261] border border-[#F4A261]/20 rounded-lg hover:bg-[#F4A261]/15 transition-colors">
-                                                <Clock className="w-3 h-3 inline mr-1" />Mark Recovering
+                                                <Clock className="w-3 h-3 inline mr-1" />Mark Healing
                                             </button>
                                         )}
                                         <button onClick={() => void updateStatus(inj.id, 'cleared')}

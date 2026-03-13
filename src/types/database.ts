@@ -23,6 +23,7 @@ export interface User {
     role: Role
     name: string | null
     photo_url: string | null
+    approved: boolean
     created_at: string
 }
 

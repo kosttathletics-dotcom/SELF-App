@@ -31,7 +31,7 @@ const ROLE_OPTIONS: { role: OnboardingRole; icon: React.ElementType; label: stri
 ]
 
 export default function Onboarding() {
-    const { user, role: ctxRole } = useAuth()
+    const { user, role: ctxRole, refreshUser } = useAuth()
     const navigate = useNavigate()
 
     const [step, setStep] = useState<'role' | 'profile'>('role')
@@ -86,6 +86,9 @@ export default function Onboarding() {
 
         // Clear onboarding flag
         sessionStorage.removeItem('self-onboarding-source')
+
+        // Refresh auth context so PrivateRoute has latest approved value
+        await refreshUser()
 
         if (selectedRole === 'coach') navigate('/dashboard', { replace: true })
         else if (selectedRole === 'athlete') navigate('/athlete/dashboard', { replace: true })

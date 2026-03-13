@@ -8,8 +8,10 @@ interface AuthContextValue {
     supabaseUser: SupabaseUser | null
     user: User | null
     role: Role | null
+    approved: boolean
     loading: boolean
     signOut: () => Promise<void>
+    refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -19,6 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
     const [user, setUser] = useState<User | null>(null)
     const [role, setRole] = useState<Role | null>(null)
+    const [approved, setApproved] = useState(false)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -61,20 +64,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!error && data) {
             setUser(data)
             setRole(data.role as Role)
+            setApproved(data.approved ?? false)
         }
         setLoading(false)
+    }
+
+    const refreshUser = async () => {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user) await fetchUser(session.user.id)
     }
 
     const signOut = async () => {
         await supabase.auth.signOut()
         setUser(null)
         setRole(null)
+        setApproved(false)
         setSession(null)
         setSupabaseUser(null)
     }
 
     return (
-        <AuthContext.Provider value={{ session, supabaseUser, user, role, loading, signOut }}>
+        <AuthContext.Provider value={{ session, supabaseUser, user, role, approved, loading, signOut, refreshUser }}>
             {children}
         </AuthContext.Provider>
     )

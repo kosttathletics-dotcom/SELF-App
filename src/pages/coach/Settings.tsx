@@ -4,20 +4,15 @@ import { PhotoUpload } from '@/components/shared/PhotoUpload'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
-import { Save, User, Shield, Bell } from 'lucide-react'
+import { Save, User, Bell } from 'lucide-react'
 
 interface CoachProfile {
     id: string
-    name: string
+    name: string | null
     email: string
     photo_url: string | null
     role: string
-    team_name: string | null
-    school: string | null
-    sport: string | null
 }
-
-const SPORTS = ['Football', 'Basketball', 'Baseball', 'Soccer', 'Track & Field', 'Wrestling', 'Swimming', 'Volleyball', 'Softball', 'Lacrosse', 'Other']
 
 const inputCls = 'w-full px-3 py-2.5 bg-[#0D0D0D] border border-[#2A2A2A] rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-[#C8F000] transition-colors text-sm'
 
@@ -28,11 +23,11 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
-    const [tab, setTab] = useState<'profile' | 'team' | 'account'>('profile')
+    const [tab, setTab] = useState<'profile' | 'account'>('profile')
 
     const load = useCallback(async () => {
         if (!user) return
-        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        const { data } = await supabase.from('users').select('*').eq('id', user.id).single()
         const p = data as unknown as CoachProfile | null
         setProfile(p)
         setForm(p ?? {})
@@ -46,12 +41,9 @@ export default function SettingsPage() {
     const save = async () => {
         if (!user) return
         setSaving(true)
-        await supabase.from('profiles').update({
+        await supabase.from('users').update({
             name: form.name,
             photo_url: form.photo_url,
-            team_name: form.team_name,
-            school: form.school,
-            sport: form.sport,
         } as never).eq('id', user.id)
         setSaving(false)
         setSaved(true)
@@ -62,12 +54,11 @@ export default function SettingsPage() {
     const handlePhotoUploaded = async (url: string) => {
         set('photo_url', url)
         if (!user) return
-        await supabase.from('profiles').update({ photo_url: url } as never).eq('id', user.id)
+        await supabase.from('users').update({ photo_url: url } as never).eq('id', user.id)
     }
 
     const TABS = [
         { id: 'profile' as const, label: 'Profile', icon: User },
-        { id: 'team' as const, label: 'Team', icon: Shield },
         { id: 'account' as const, label: 'Account', icon: Bell },
     ]
 
@@ -90,7 +81,6 @@ export default function SettingsPage() {
                     <div>
                         <h2 className="font-heading font-bold text-white text-lg">{profile?.name ?? 'Coach'}</h2>
                         <p className="text-white/40 text-sm capitalize">{profile?.role}</p>
-                        {profile?.school && <p className="text-white/30 text-xs mt-0.5">{profile.school}</p>}
                     </div>
                 </div>
             )}
@@ -121,26 +111,6 @@ export default function SettingsPage() {
                                 <label className="block text-xs text-white/50 mb-1">Email</label>
                                 <input className={cn(inputCls, 'opacity-50 cursor-not-allowed')} value={user?.email ?? ''} readOnly />
                                 <p className="text-white/25 text-[10px] mt-1">Email is managed through Supabase Auth</p>
-                            </div>
-                        </>
-                    )}
-
-                    {tab === 'team' && (
-                        <>
-                            <div>
-                                <label className="block text-xs text-white/50 mb-1">Team Name</label>
-                                <input className={inputCls} value={form.team_name ?? ''} onChange={e => set('team_name', e.target.value)} placeholder="e.g. Varsity Eagles" />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-white/50 mb-1">School / Organization</label>
-                                <input className={inputCls} value={form.school ?? ''} onChange={e => set('school', e.target.value)} placeholder="e.g. Lincoln High School" />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-white/50 mb-1">Primary Sport</label>
-                                <select className={inputCls} value={form.sport ?? ''} onChange={e => set('sport', e.target.value)}>
-                                    <option value="">Select sport</option>
-                                    {SPORTS.map(s => <option key={s}>{s}</option>)}
-                                </select>
                             </div>
                         </>
                     )}

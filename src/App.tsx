@@ -19,6 +19,7 @@ import CalendarPage from '@/pages/coach/CalendarPage'
 import SettingsPage from '@/pages/coach/Settings'
 import InjuryLogPage from '@/pages/coach/InjuryLog'
 import RecruitingPage from '@/pages/coach/Recruiting'
+import TeamAccessPage from '@/pages/coach/TeamAccess'
 
 // Athlete pages
 import AthleteDashboard from '@/pages/athlete/Dashboard'
@@ -28,6 +29,7 @@ import AthleteNutrition from '@/pages/athlete/Nutrition'
 import AthleteMessages from '@/pages/athlete/Messages'
 import AthleteCalendar from '@/pages/athlete/CalendarPage'
 import AthleteProfile from '@/pages/athlete/Profile'
+import LogWorkout from '@/pages/athlete/LogWorkout'
 
 // Parent pages
 import ParentDashboard from '@/pages/parent/Dashboard'
@@ -104,6 +106,11 @@ export default function App() {
               <RecruitingPage />
             </PrivateRoute>
           } />
+          <Route path="/team-access" element={
+            <PrivateRoute allowedRoles={['coach']}>
+              <TeamAccessPage />
+            </PrivateRoute>
+          } />
 
           {/* Athlete routes */}
           <Route path="/athlete/dashboard" element={
@@ -139,6 +146,11 @@ export default function App() {
           <Route path="/athlete/profile" element={
             <PrivateRoute allowedRoles={['athlete']}>
               <AthleteProfile />
+            </PrivateRoute>
+          } />
+          <Route path="/athlete/log-workout" element={
+            <PrivateRoute allowedRoles={['athlete']}>
+              <LogWorkout />
             </PrivateRoute>
           } />
 

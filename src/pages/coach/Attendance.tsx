@@ -16,7 +16,7 @@ interface AttendanceEvent {
     time: string | null
     location: string | null
     type: string
-    required: boolean
+    notes: string | null
     created_at: string
 }
 
@@ -24,7 +24,7 @@ interface AttendanceRecord {
     id: string
     event_id: string
     athlete_id: string
-    status: 'present' | 'absent' | 'excused' | 'late'
+    status: 'present' | 'late' | 'absent'
     athlete_name?: string
     photo_url?: string | null
 }
@@ -35,7 +35,7 @@ interface AthleteBasic {
     photo_url: string | null
 }
 
-const EVENT_TYPES = ['Practice', 'Game', 'Film Session', 'Strength Training', 'Meeting', 'Other']
+const EVENT_TYPES = ['Lift', 'Practice', 'Game', 'Meeting', 'Event']
 
 export default function AttendancePage() {
     const { user } = useAuth()
@@ -45,13 +45,13 @@ export default function AttendancePage() {
     const [expandedEvent, setExpandedEvent] = useState<string | null>(null)
     const [eventRecords, setEventRecords] = useState<Record<string, AttendanceRecord[]>>({})
     const [showNewEvent, setShowNewEvent] = useState(false)
-    const [newEvent, setNewEvent] = useState({ title: '', date: format(new Date(), 'yyyy-MM-dd'), time: '', location: '', type: 'Practice', required: true })
+    const [newEvent, setNewEvent] = useState({ title: '', date: format(new Date(), 'yyyy-MM-dd'), time: '', location: '', type: 'Practice', notes: '' })
     const [saving, setSaving] = useState(false)
 
     const load = useCallback(async () => {
         if (!user) return
         const [eventsRes, athletesRes] = await Promise.all([
-            supabase.from('events').select('*').eq('coach_id', user.id).order('date', { ascending: false }).limit(30),
+            supabase.from('attendance_events').select('*').eq('coach_id', user.id).order('date', { ascending: false }).limit(30),
             supabase.from('athletes').select('id, name, photo_url').eq('coach_id', user.id).eq('status', 'active' as never).order('name'),
         ])
         setEvents((eventsRes.data ?? []) as unknown as AttendanceEvent[])
@@ -63,7 +63,7 @@ export default function AttendancePage() {
 
     const loadEventRecords = useCallback(async (eventId: string) => {
         const { data } = await supabase
-            .from('attendance')
+            .from('attendance_records')
             .select('id, event_id, athlete_id, status')
             .eq('event_id', eventId)
         setEventRecords(r => ({ ...r, [eventId]: (data ?? []) as unknown as AttendanceRecord[] }))
@@ -79,9 +79,9 @@ export default function AttendancePage() {
         if (!user) return
         const existing = eventRecords[eventId]?.find(r => r.athlete_id === athleteId)
         if (existing) {
-            await supabase.from('attendance').update({ status } as never).eq('id', existing.id)
+            await supabase.from('attendance_records').update({ status } as never).eq('id', existing.id)
         } else {
-            await supabase.from('attendance').insert({ event_id: eventId, athlete_id: athleteId, coach_id: user.id, status } as never)
+            await supabase.from('attendance_records').insert({ event_id: eventId, athlete_id: athleteId, status } as never)
         }
         await loadEventRecords(eventId)
     }
@@ -89,13 +89,15 @@ export default function AttendancePage() {
     const createEvent = async () => {
         if (!user || !newEvent.title || !newEvent.date) return
         setSaving(true)
-        await supabase.from('events').insert({
-            ...newEvent, coach_id: user.id,
+        await supabase.from('attendance_events').insert({
+            title: newEvent.title, date: newEvent.date, type: newEvent.type,
+            coach_id: user.id,
             time: newEvent.time || null, location: newEvent.location || null,
+            notes: newEvent.notes || null,
         } as never)
         setSaving(false)
         setShowNewEvent(false)
-        setNewEvent({ title: '', date: format(new Date(), 'yyyy-MM-dd'), time: '', location: '', type: 'Practice', required: true })
+        setNewEvent({ title: '', date: format(new Date(), 'yyyy-MM-dd'), time: '', location: '', type: 'Practice', notes: '' })
         void load()
     }
 
@@ -151,16 +153,6 @@ export default function AttendancePage() {
                             <input className={inputCls} placeholder="Optional" value={newEvent.location} onChange={e => setNewEvent(n => ({ ...n, location: e.target.value }))} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <div
-                                onClick={() => setNewEvent(n => ({ ...n, required: !n.required }))}
-                                className={cn('w-9 h-5 rounded-full transition-colors relative cursor-pointer', newEvent.required ? 'bg-[#C8F000]' : 'bg-[#2A2A2A]')}>
-                                <div className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform', newEvent.required ? 'translate-x-4' : 'translate-x-0.5')} />
-                            </div>
-                            <span className="text-white/60 text-sm">Required attendance</span>
-                        </label>
-                    </div>
                     <div className="flex gap-2">
                         <button onClick={() => void createEvent()} disabled={saving || !newEvent.title}
                             className="flex-1 py-2.5 bg-[#C8F000] text-[#0D0D0D] font-heading font-bold rounded-xl text-sm disabled:opacity-50">
@@ -196,7 +188,6 @@ export default function AttendancePage() {
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <p className="font-heading font-semibold text-white text-sm">{ev.title}</p>
                                             <Badge>{ev.type}</Badge>
-                                            {ev.required && <Badge variant="warning">Required</Badge>}
                                         </div>
                                         <p className="text-white/40 text-xs mt-0.5">
                                             {format(parseISO(ev.date), 'EEE, MMM d, yyyy')}
@@ -239,16 +230,15 @@ export default function AttendancePage() {
                                                         <Avatar name={a.name} photoUrl={a.photo_url} size="sm" />
                                                         <span className="text-white text-sm flex-1">{a.name}</span>
                                                         <div className="flex gap-1">
-                                                            {(['present', 'late', 'excused', 'absent'] as const).map(s => (
+                                                            {(['present', 'late', 'absent'] as const).map(s => (
                                                                 <button key={s} onClick={() => void takeAttendance(ev.id, a.id, s)}
                                                                     className={cn('px-2.5 py-1 rounded-lg text-xs font-medium transition-all capitalize',
                                                                         status === s
                                                                             ? s === 'present' ? 'bg-[#C8F000] text-[#0D0D0D]'
                                                                                 : s === 'late' ? 'bg-[#F4A261] text-[#0D0D0D]'
-                                                                                    : s === 'excused' ? 'bg-blue-500/30 text-blue-400'
-                                                                                        : 'bg-[#FF4444]/30 text-[#FF4444]'
+                                                                                    : 'bg-[#FF4444]/30 text-[#FF4444]'
                                                                             : 'bg-[#2A2A2A] text-white/30 hover:text-white/60')}>
-                                                                    {s === 'present' ? '✓' : s === 'late' ? 'L' : s === 'excused' ? 'E' : '✗'}
+                                                                    {s === 'present' ? '✓' : s === 'late' ? 'L' : '✗'}
                                                                 </button>
                                                             ))}
                                                         </div>

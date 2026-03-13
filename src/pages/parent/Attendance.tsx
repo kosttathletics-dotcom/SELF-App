@@ -6,18 +6,17 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { format, parseISO } from 'date-fns'
 import { cn } from '@/lib/utils'
-import { Calendar, CheckCircle2, XCircle, Clock, AlertCircle, AlertTriangle } from 'lucide-react'
+import { Calendar, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react'
 
 interface AttendanceRecord {
     id: string
-    status: 'present' | 'absent' | 'excused' | 'late'
-    event: { id: string; title: string; date: string; type: string; required: boolean }
+    status: 'present' | 'absent' | 'late'
+    event: { id: string; title: string; date: string; type: string }
 }
 
 const STATUS_ICON = {
     present: <CheckCircle2 className="w-4 h-4 text-[#C8F000]" />,
     late: <Clock className="w-4 h-4 text-[#F4A261]" />,
-    excused: <AlertCircle className="w-4 h-4 text-blue-400" />,
     absent: <XCircle className="w-4 h-4 text-[#FF4444]" />,
 }
 
@@ -35,14 +34,14 @@ export default function ParentAttendance() {
 
         const [nameRes, attRes] = await Promise.all([
             supabase.from('athletes').select('name').eq('id', link.athlete_id).single(),
-            supabase.from('attendance').select('id, status, events(id, title, date, type, required)')
+            supabase.from('attendance_records').select('id, status, attendance_events(id, title, date, type)')
                 .eq('athlete_id', link.athlete_id).order('created_at', { ascending: false }),
         ])
 
         setAthleteName((nameRes.data as unknown as { name: string } | null)?.name ?? '')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const raw = (attRes.data ?? []) as any[]
-        setRecords(raw.map(r => ({ id: r.id, status: r.status, event: r.events })))
+        setRecords(raw.map(r => ({ id: r.id, status: r.status, event: r.attendance_events })))
         setLoading(false)
     }, [user])
 
@@ -97,7 +96,7 @@ export default function ParentAttendance() {
                                     <p className="text-white text-sm font-medium truncate">{r.event?.title}</p>
                                     <p className="text-white/40 text-xs mt-0.5">{r.event?.date ? format(parseISO(r.event.date), 'EEE, MMM d') : '—'} · {r.event?.type}</p>
                                 </div>
-                                <Badge variant={r.status === 'present' ? 'success' : r.status === 'late' ? 'warning' : r.status === 'excused' ? 'info' : 'error'} className="capitalize">
+                                <Badge variant={r.status === 'present' ? 'success' : r.status === 'late' ? 'warning' : 'error'} className="capitalize">
                                     {r.status}
                                 </Badge>
                             </div>

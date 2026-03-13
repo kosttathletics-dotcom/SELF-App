@@ -9,31 +9,31 @@ import { format } from 'date-fns'
 
 type MainTab = 'exercises' | 'workouts' | 'templates'
 
-const MUSCLE_GROUPS = ['All', 'Chest', 'Back', 'Shoulders', 'Arms', 'Core', 'Legs', 'Glutes', 'Full Body', 'Cardio']
-const CATEGORIES = ['All', 'Barbell', 'Dumbbell', 'Machine', 'Cable', 'Bodyweight', 'Kettlebell', 'Plyometric']
+const CATEGORIES = ['All', 'Strength', 'Power', 'Conditioning', 'Mobility', 'Sport-Specific']
+const PROGRESSION_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Elite']
 
 interface Exercise {
     id: string
     name: string
-    category: string
-    muscle_group: string | null
-    description: string | null
-    is_custom: boolean
+    category: string | null
+    progression_level: string | null
+    video_url: string | null
+    notes: string | null
     coach_id: string | null
 }
 
 interface ExerciseFormState {
     name: string
     category: string
-    muscle_group: string
-    description: string
+    progression_level: string
+    notes: string
 }
 
 interface WorkoutFormState {
     name: string
     date: string
     description: string
-    exercises: { exercise_id: string; sets: number; reps: string; rest: string; notes: string }[]
+    exercises: { exercise_id: string; sets: number; reps: string; target_weight: string; notes: string }[]
 }
 
 interface Athlete { id: string; name: string }
@@ -44,7 +44,6 @@ export default function TrainingPage() {
     const [exercises, setExercises] = useState<Exercise[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
-    const [filterMuscle, setFilterMuscle] = useState('All')
     const [filterCategory, setFilterCategory] = useState('All')
     const [showAddExercise, setShowAddExercise] = useState(false)
     const [showAddWorkout, setShowAddWorkout] = useState(false)
@@ -82,11 +81,9 @@ export default function TrainingPage() {
     }, [loadExercises, loadWorkouts, loadAthletes])
 
     const filteredExercises = exercises.filter(ex => {
-        const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase()) ||
-            (ex.muscle_group ?? '').toLowerCase().includes(search.toLowerCase())
-        const matchMuscle = filterMuscle === 'All' || ex.muscle_group === filterMuscle
+        const matchSearch = ex.name.toLowerCase().includes(search.toLowerCase())
         const matchCat = filterCategory === 'All' || ex.category === filterCategory
-        return matchSearch && matchMuscle && matchCat
+        return matchSearch && matchCat
     })
 
     const tabs: { id: MainTab; label: string; icon: typeof Dumbbell }[] = [
@@ -129,19 +126,10 @@ export default function TrainingPage() {
                                 className="w-full pl-10 pr-4 py-3 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-[#C8F000] transition-colors text-sm" />
                         </div>
                         <div className="flex gap-2 overflow-x-auto scrollbar-none">
-                            {MUSCLE_GROUPS.map(m => (
-                                <button key={m} onClick={() => setFilterMuscle(m)}
-                                    className={cn('flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all',
-                                        filterMuscle === m ? 'bg-[#C8F000] text-[#0D0D0D]' : 'bg-[#1A1A1A] border border-[#2A2A2A] text-white/50 hover:text-white/80')}>
-                                    {m}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex gap-2 overflow-x-auto scrollbar-none">
                             {CATEGORIES.map(c => (
                                 <button key={c} onClick={() => setFilterCategory(c)}
                                     className={cn('flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all',
-                                        filterCategory === c ? 'bg-[#C8F000]/20 text-[#C8F000] border border-[#C8F000]/30' : 'bg-[#1A1A1A] border border-[#2A2A2A] text-white/50 hover:text-white/80')}>
+                                        filterCategory === c ? 'bg-[#C8F000] text-[#0D0D0D]' : 'bg-[#1A1A1A] border border-[#2A2A2A] text-white/50 hover:text-white/80')}>
                                     {c}
                                 </button>
                             ))}
@@ -168,16 +156,14 @@ export default function TrainingPage() {
                                 <div key={ex.id} className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl p-4 hover:border-[#C8F000]/30 transition-colors">
                                     <div className="flex items-start justify-between gap-2">
                                         <h3 className="font-heading font-semibold text-white text-sm">{ex.name}</h3>
-                                        {ex.is_custom && (
-                                            <span className="flex-shrink-0 text-[10px] bg-[#C8F000]/15 text-[#C8F000] px-1.5 py-0.5 rounded-full">Custom</span>
+                                        {ex.progression_level && (
+                                            <span className="flex-shrink-0 text-[10px] bg-[#C8F000]/15 text-[#C8F000] px-1.5 py-0.5 rounded-full">{ex.progression_level}</span>
                                         )}
                                     </div>
                                     <div className="flex items-center gap-2 mt-1.5">
-                                        {ex.muscle_group && <span className="text-white/40 text-xs">{ex.muscle_group}</span>}
-                                        {ex.muscle_group && ex.category && <span className="text-white/20 text-xs">·</span>}
-                                        <span className="text-white/40 text-xs">{ex.category}</span>
+                                        {ex.category && <span className="text-white/40 text-xs">{ex.category}</span>}
                                     </div>
-                                    {ex.description && <p className="text-white/30 text-xs mt-2 line-clamp-2">{ex.description}</p>}
+                                    {ex.notes && <p className="text-white/30 text-xs mt-2 line-clamp-2">{ex.notes}</p>}
                                 </div>
                             ))}
                         </div>
@@ -254,7 +240,7 @@ function WorkoutsTab({ workouts, onRefresh, athletes, showAddWorkout, setShowAdd
 
 /* ─── Exercise Form Modal ─── */
 function ExerciseFormModal({ onClose, onSaved, coachId }: { onClose: () => void; onSaved: () => void; coachId: string }) {
-    const [form, setForm] = useState<ExerciseFormState>({ name: '', category: 'Barbell', muscle_group: '', description: '' })
+    const [form, setForm] = useState<ExerciseFormState>({ name: '', category: 'Strength', progression_level: '', notes: '' })
     const [saving, setSaving] = useState(false)
     const set = (k: keyof ExerciseFormState, v: string) => setForm(f => ({ ...f, [k]: v }))
 
@@ -263,7 +249,13 @@ function ExerciseFormModal({ onClose, onSaved, coachId }: { onClose: () => void;
     const submit = async (e: React.FormEvent) => {
         e.preventDefault()
         setSaving(true)
-        await supabase.from('exercises').insert({ ...form, is_custom: true, coach_id: coachId } as never)
+        await supabase.from('exercises').insert({
+            name: form.name,
+            category: form.category || null,
+            progression_level: form.progression_level || null,
+            notes: form.notes || null,
+            coach_id: coachId,
+        } as never)
         onSaved()
     }
 
@@ -284,15 +276,15 @@ function ExerciseFormModal({ onClose, onSaved, coachId }: { onClose: () => void;
                                 {CATEGORIES.filter(c => c !== 'All').map(c => <option key={c}>{c}</option>)}
                             </select>
                         </div>
-                        <div><label className="block text-xs text-white/50 mb-1">Muscle Group</label>
-                            <select className={inputCls} value={form.muscle_group} onChange={e => set('muscle_group', e.target.value)}>
+                        <div><label className="block text-xs text-white/50 mb-1">Progression Level</label>
+                            <select className={inputCls} value={form.progression_level} onChange={e => set('progression_level', e.target.value)}>
                                 <option value="">Select</option>
-                                {MUSCLE_GROUPS.filter(m => m !== 'All').map(m => <option key={m}>{m}</option>)}
+                                {PROGRESSION_LEVELS.map(l => <option key={l}>{l}</option>)}
                             </select>
                         </div>
                     </div>
-                    <div><label className="block text-xs text-white/50 mb-1">Description (optional)</label>
-                        <textarea className={cn(inputCls, 'resize-none')} rows={3} value={form.description} onChange={e => set('description', e.target.value)} placeholder="Form cues, notes..." />
+                    <div><label className="block text-xs text-white/50 mb-1">Notes (optional)</label>
+                        <textarea className={cn(inputCls, 'resize-none')} rows={3} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Form cues, notes..." />
                     </div>
                     <button type="submit" disabled={saving || !form.name}
                         className="w-full py-3 bg-[#C8F000] text-[#0D0D0D] font-heading font-bold rounded-xl text-sm disabled:opacity-50 hover:bg-[#d4f520] transition-all">
@@ -326,7 +318,7 @@ function WorkoutFormModal({ exercises, athletes, coachId, onClose, onSaved }: {
     const addExercise = (ex: Exercise) => {
         setForm(f => ({
             ...f,
-            exercises: [...f.exercises, { exercise_id: ex.id, sets: 3, reps: '8', rest: '90', notes: '' }],
+            exercises: [...f.exercises, { exercise_id: ex.id, sets: 3, reps: '8', target_weight: '', notes: '' }],
         }))
         setShowExPicker(false)
     }
@@ -358,8 +350,9 @@ function WorkoutFormModal({ exercises, athletes, coachId, onClose, onSaved }: {
             await supabase.from('workout_exercises').insert(
                 form.exercises.map((ex, idx) => ({
                     workout_id: wId, exercise_id: ex.exercise_id,
-                    sets: ex.sets, reps: ex.reps, rest: parseInt(ex.rest),
-                    order: idx + 1, notes: ex.notes || null,
+                    sets: ex.sets, reps: parseInt(ex.reps) || null,
+                    target_weight: ex.target_weight ? parseFloat(ex.target_weight) : null,
+                    order_index: idx, notes: ex.notes || null,
                 })) as never
             )
         }
@@ -434,7 +427,7 @@ function WorkoutFormModal({ exercises, athletes, coachId, onClose, onSaved }: {
                                             <button type="button" key={ex.id} onClick={() => addExercise(ex)}
                                                 className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-[#1A1A1A] transition-colors">
                                                 <span className="font-medium">{ex.name}</span>
-                                                <span className="text-white/30 ml-2 text-xs">{ex.muscle_group ?? ex.category}</span>
+                                                <span className="text-white/30 ml-2 text-xs">{ex.category ?? ex.progression_level}</span>
                                             </button>
                                         ))}
                                         {filteredEx.length === 0 && <p className="text-white/30 text-sm px-4 py-3">No exercises found</p>}
@@ -455,7 +448,7 @@ function WorkoutFormModal({ exercises, athletes, coachId, onClose, onSaved }: {
                                                 {[
                                                     { label: 'Sets', key: 'sets', type: 'number', value: ex.sets },
                                                     { label: 'Reps', key: 'reps', type: 'text', value: ex.reps },
-                                                    { label: 'Rest (s)', key: 'rest', type: 'text', value: ex.rest },
+                                                    { label: 'Weight', key: 'target_weight', type: 'text', value: ex.target_weight },
                                                 ].map(({ label, key, type, value }) => (
                                                     <div key={key}>
                                                         <label className="block text-[10px] text-white/30 mb-1">{label}</label>

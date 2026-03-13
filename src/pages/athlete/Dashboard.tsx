@@ -8,15 +8,16 @@ import { ProgressBar } from '@/components/shared/ProgressBar'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { calculateGPA } from '@/lib/gpa'
-import { format } from 'date-fns'
+import { format, startOfWeek, endOfWeek, differenceInDays, parseISO } from 'date-fns'
 import { cn } from '@/lib/utils'
 import {
     GraduationCap, Dumbbell, MessageCircle, AlertTriangle,
-    ChevronRight, CheckCircle2, Calendar, Trophy
+    ChevronRight, Calendar, Trophy, CalendarCheck
 } from 'lucide-react'
 
 interface AssignedWorkout {
     id: string
+    workoutId: string
     name: string
     date: string
     description: string | null
@@ -33,14 +34,25 @@ interface AthleteStats {
     grade: string | null
 }
 
+interface PREntry {
+    id: string
+    weight: number
+    estimated_1rm: number
+    exerciseName: string
+    date: string
+}
+
 export default function AthleteDashboard() {
     const { user } = useAuth()
     const [athlete, setAthlete] = useState<AthleteStats | null>(null)
     const [gpa, setGpa] = useState<number | null>(null)
     const [attendancePct, setAttendancePct] = useState<number | null>(null)
-    const [activeInjuries, setActiveInjuries] = useState(0)
+    const [workoutsThisWeek, setWorkoutsThisWeek] = useState(0)
+    const [daysUntilNextEvent, setDaysUntilNextEvent] = useState<number | null>(null)
     const [todayWorkout, setTodayWorkout] = useState<AssignedWorkout | null>(null)
     const [upcomingWorkouts, setUpcomingWorkouts] = useState<AssignedWorkout[]>([])
+    const [recentPRs, setRecentPRs] = useState<PREntry[]>([])
+    const [activeInjuries, setActiveInjuries] = useState(0)
     const [loading, setLoading] = useState(true)
     const [expandWorkout, setExpandWorkout] = useState<string | null>(null)
     const [today] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -57,21 +69,41 @@ export default function AthleteDashboard() {
         if (!ath) return setLoading(false)
         setAthlete(ath)
 
-        // Load grades, attendance, injuries in parallel
-        const [gradesRes, attRes, injRes, workoutsRes] = await Promise.all([
+        const weekStart = format(startOfWeek(new Date()), 'yyyy-MM-dd')
+        const weekEnd = format(endOfWeek(new Date()), 'yyyy-MM-dd')
+
+        // Load all data in parallel
+        const [gradesRes, attRes, injRes, workoutsRes, logsRes, eventsRes, prsRes] = await Promise.all([
             supabase.from('grades').select('gpa_points').eq('athlete_id', ath.id),
-            supabase.from('attendance').select('status').eq('athlete_id', ath.id),
+            supabase.from('attendance_records').select('status').eq('athlete_id', ath.id),
             supabase.from('injuries').select('id').eq('athlete_id', ath.id).eq('status', 'active' as never),
             supabase.from('workout_assignments')
                 .select(`
-          id, completed, assigned_date,
-          workouts(id, name, description,
-            workout_exercises(exercise_name, sets, reps, rest_seconds, sort_order)
-          )
-        `)
+                    id, completed, assigned_date,
+                    workouts(id, name, description,
+                        workout_exercises(exercise_name, sets, reps, rest_seconds, sort_order)
+                    )
+                `)
                 .eq('athlete_id', ath.id)
                 .gte('assigned_date', today)
                 .order('assigned_date', { ascending: true })
+                .limit(5),
+            supabase.from('workout_logs')
+                .select('id')
+                .eq('athlete_id', ath.id)
+                .eq('completed', true)
+                .gte('date', weekStart)
+                .lte('date', weekEnd),
+            supabase.from('attendance_events')
+                .select('date')
+                .gte('date', today)
+                .order('date', { ascending: true })
+                .limit(1),
+            supabase.from('personal_records')
+                .select('id, weight, estimated_1rm, date, exercises(name)')
+                .eq('athlete_id', ath.id)
+                .eq('is_pr', true)
+                .order('date', { ascending: false })
                 .limit(5),
         ])
 
@@ -87,11 +119,22 @@ export default function AthleteDashboard() {
         // Injuries
         setActiveInjuries((injRes.data ?? []).length)
 
+        // Workouts this week
+        setWorkoutsThisWeek((logsRes.data ?? []).length)
+
+        // Days until next event
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nextEvent = (eventsRes.data ?? [])[0] as any
+        if (nextEvent?.date) {
+            setDaysUntilNextEvent(differenceInDays(parseISO(nextEvent.date), new Date()))
+        }
+
         // Workouts
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const raw = (workoutsRes.data ?? []) as any[]
         const parsed: AssignedWorkout[] = raw.map(r => ({
             id: r.id as string,
+            workoutId: (r.workouts?.id ?? '') as string,
             name: r.workouts?.name ?? 'Workout',
             date: r.assigned_date as string,
             description: r.workouts?.description ?? null,
@@ -111,15 +154,23 @@ export default function AthleteDashboard() {
         const todayW = parsed.find(w => w.date === today) ?? null
         setTodayWorkout(todayW)
         setUpcomingWorkouts(parsed.filter(w => w.date !== today).slice(0, 3))
+
+        // Recent PRs
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prsRaw = (prsRes.data ?? []) as any[]
+        setRecentPRs(prsRaw.map(pr => ({
+            id: pr.id as string,
+            weight: pr.weight as number,
+            estimated_1rm: pr.estimated_1rm as number,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            exerciseName: (pr as any).exercises?.name ?? 'Exercise',
+            date: pr.date as string,
+        })))
+
         setLoading(false)
     }, [user, today])
 
     useEffect(() => { void load() }, [load])
-
-    const markComplete = async (assignmentId: string) => {
-        await supabase.from('workout_assignments').update({ completed: true } as never).eq('id', assignmentId)
-        void load()
-    }
 
     const hour = new Date().getHours()
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -130,8 +181,8 @@ export default function AthleteDashboard() {
                 <div className="space-y-4 animate-pulse">
                     <div className="h-28 bg-[#1A1A1A] rounded-2xl" />
                     <div className="h-40 bg-[#1A1A1A] rounded-2xl" />
-                    <div className="grid grid-cols-3 gap-3">
-                        {[1, 2, 3].map(i => <div key={i} className="h-20 bg-[#1A1A1A] rounded-xl" />)}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        {[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-[#1A1A1A] rounded-xl" />)}
                     </div>
                 </div>
             </AppShell>
@@ -157,7 +208,7 @@ export default function AthleteDashboard() {
                 <Avatar name={athlete.name} photoUrl={athlete.photo_url} size="lg" />
                 <div>
                     <p className="text-white/50 text-sm">{greeting},</p>
-                    <h1 className="text-2xl font-heading font-bold text-white leading-tight">{athlete.name.split(' ')[0]} 👋</h1>
+                    <h1 className="text-2xl font-heading font-bold text-white leading-tight">{athlete.name.split(' ')[0]}</h1>
                     <div className="flex flex-wrap gap-2 mt-1.5">
                         {athlete.sport && <Badge>{athlete.sport}</Badge>}
                         {athlete.position && <Badge>{athlete.position}</Badge>}
@@ -176,11 +227,39 @@ export default function AthleteDashboard() {
                 </div>
             )}
 
+            {/* Stats row — 4 cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                <StatCard
+                    label="Workouts This Week"
+                    value={workoutsThisWeek}
+                    icon={Dumbbell}
+                    accent={workoutsThisWeek > 0}
+                />
+                <StatCard
+                    label="Current GPA"
+                    value={gpa !== null ? gpa.toFixed(2) : '--'}
+                    icon={GraduationCap}
+                    accent={gpa !== null && gpa >= 2.5}
+                />
+                <StatCard
+                    label="Attendance"
+                    value={attendancePct !== null ? `${attendancePct}%` : '--'}
+                    icon={Calendar}
+                    accent={attendancePct !== null && attendancePct >= 80}
+                />
+                <StatCard
+                    label="Next Event"
+                    value={daysUntilNextEvent !== null ? `${daysUntilNextEvent}d` : '--'}
+                    icon={CalendarCheck}
+                    accent={daysUntilNextEvent !== null && daysUntilNextEvent <= 3}
+                />
+            </div>
+
             {/* Today's workout */}
             <div className="mb-5">
                 <div className="flex items-center justify-between mb-3">
                     <h2 className="font-heading font-bold text-white text-sm">Today's Workout</h2>
-                    <Link to="/athlete/training" className="text-[#C8F000] text-xs">See all →</Link>
+                    <Link to="/athlete/training" className="text-[#C8F000] text-xs">See all</Link>
                 </div>
 
                 {!todayWorkout ? (
@@ -205,7 +284,7 @@ export default function AthleteDashboard() {
                             <div className="flex-1">
                                 <div className="flex items-center gap-2">
                                     <p className="font-heading font-semibold text-white">{todayWorkout.name}</p>
-                                    {todayWorkout.completed && <Badge variant="success">✓ Done</Badge>}
+                                    {todayWorkout.completed && <Badge variant="success">Done</Badge>}
                                 </div>
                                 <p className="text-white/40 text-xs mt-0.5">
                                     {todayWorkout.exercises.length} exercise{todayWorkout.exercises.length !== 1 ? 's' : ''} · Today
@@ -226,7 +305,7 @@ export default function AthleteDashboard() {
                                             <div className="flex-1">
                                                 <p className="text-white text-sm font-medium">{ex.exercise_name}</p>
                                                 <p className="text-white/40 text-xs">
-                                                    {ex.sets} sets × {ex.reps}
+                                                    {ex.sets} sets x {ex.reps}
                                                     {ex.rest_seconds && ` · ${ex.rest_seconds}s rest`}
                                                 </p>
                                             </div>
@@ -234,39 +313,18 @@ export default function AthleteDashboard() {
                                     ))}
                                 </div>
                                 {!todayWorkout.completed && (
-                                    <button
-                                        onClick={() => void markComplete(todayWorkout.id)}
-                                        className="w-full py-2.5 bg-[#C8F000] text-[#0D0D0D] font-heading font-bold rounded-xl text-sm hover:bg-[#d4f520] active:scale-[0.98] transition-all"
+                                    <Link
+                                        to={`/athlete/log-workout?workout=${todayWorkout.workoutId}&assignment=${todayWorkout.id}`}
+                                        className="w-full py-2.5 bg-[#C8F000] text-[#0D0D0D] font-heading font-bold rounded-xl text-sm hover:bg-[#d4f520] active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
                                     >
-                                        <CheckCircle2 className="w-4 h-4 inline mr-1.5 -mt-0.5" />
-                                        Mark as Complete
-                                    </button>
+                                        <Dumbbell className="w-4 h-4" />
+                                        Start Workout
+                                    </Link>
                                 )}
                             </div>
                         )}
                     </div>
                 )}
-            </div>
-
-            {/* Stats row */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
-                <StatCard
-                    label="GPA"
-                    value={gpa !== null ? gpa.toFixed(2) : '—'}
-                    icon={GraduationCap}
-                    accent={gpa !== null && gpa >= 2.5}
-                />
-                <StatCard
-                    label="Attendance"
-                    value={attendancePct !== null ? `${attendancePct}%` : '—'}
-                    icon={Calendar}
-                    accent={attendancePct !== null && attendancePct >= 80}
-                />
-                <StatCard
-                    label="Injuries"
-                    value={activeInjuries}
-                    icon={AlertTriangle}
-                />
             </div>
 
             {/* GPA progress bar */}
@@ -275,16 +333,40 @@ export default function AthleteDashboard() {
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-white/60 text-xs">GPA Progress</span>
                         <span className={cn('text-xs font-medium', gpa >= 3.0 ? 'text-[#C8F000]' : gpa >= 2.5 ? 'text-[#F4A261]' : 'text-[#FF4444]')}>
-                            {gpa >= 3.0 ? 'Honor Roll' : gpa >= 2.5 ? 'Eligible' : '⚠ Red Flag'}
+                            {gpa >= 3.0 ? 'Honor Roll' : gpa >= 2.5 ? 'Eligible' : 'Red Flag'}
                         </span>
                     </div>
                     <ProgressBar value={gpa} max={4.0} variant={gpa >= 2.5 ? 'success' : 'error'} />
                 </div>
             )}
 
+            {/* Recent PRs */}
+            {recentPRs.length > 0 && (
+                <div className="mb-5">
+                    <h2 className="font-heading font-bold text-white text-sm mb-3">Recent PRs</h2>
+                    <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-2xl overflow-hidden divide-y divide-[#2A2A2A]">
+                        {recentPRs.map(pr => (
+                            <div key={pr.id} className="flex items-center gap-3 px-4 py-3">
+                                <div className="w-8 h-8 rounded-lg bg-[#C8F000]/15 flex items-center justify-center flex-shrink-0">
+                                    <Trophy className="w-4 h-4 text-[#C8F000]" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-white text-sm font-medium">{pr.exerciseName}</p>
+                                    <p className="text-white/40 text-xs">{format(parseISO(pr.date), 'MMM d, yyyy')}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[#C8F000] font-heading font-bold text-sm">{pr.weight} lbs</p>
+                                    <p className="text-white/30 text-xs">1RM: {pr.estimated_1rm}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Upcoming workouts */}
             {upcomingWorkouts.length > 0 && (
-                <div>
+                <div className="mb-5">
                     <h2 className="font-heading font-bold text-white text-sm mb-3">Upcoming Workouts</h2>
                     <div className="space-y-2">
                         {upcomingWorkouts.map(w => (

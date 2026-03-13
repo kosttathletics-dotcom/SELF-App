@@ -55,7 +55,7 @@ export default function RecruitingPage() {
         const ids = athList.map(a => a.id)
         const [gradesRes, prsRes] = await Promise.all([
             supabase.from('grades').select('athlete_id, gpa_points').in('athlete_id', ids),
-            supabase.from('personal_records').select('athlete_id, metric_type, value').eq('is_pr', true).in('athlete_id', ids),
+            supabase.from('personal_records').select('athlete_id, estimated_1rm, exercises(name)').eq('is_pr', true).in('athlete_id', ids),
         ])
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,18 +63,37 @@ export default function RecruitingPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const prs = (prsRes.data ?? []) as any[]
 
+        // Map exercise names to recruiting metrics
+        const exerciseMetricMap: Record<string, string> = {
+            '40 yard dash': 'fortyYard', '40-yard dash': 'fortyYard', '40 yard': 'fortyYard',
+            'bench press': 'bench', 'bench': 'bench',
+            'squat': 'squat', 'back squat': 'squat',
+            'vertical jump': 'vertical', 'vertical': 'vertical',
+        }
+
         const rows: AthleteWithStats[] = athList.map(a => {
             const ag = grades.filter(g => g.athlete_id === a.id)
             const gpa = ag.length > 0 ? calculateGPA(ag) : null
-            const prFor = (metric: string) => prs.find(p => p.athlete_id === a.id && p.metric_type === metric)?.value ?? null
+
+            const athletePrs = prs.filter(p => p.athlete_id === a.id)
+            const metrics: Record<string, number | null> = { fortyYard: null, bench: null, squat: null, vertical: null }
+            for (const pr of athletePrs) {
+                const exName = (pr.exercises?.name ?? '').toLowerCase()
+                for (const [pattern, metricKey] of Object.entries(exerciseMetricMap)) {
+                    if (exName.includes(pattern)) {
+                        metrics[metricKey] = pr.estimated_1rm
+                        break
+                    }
+                }
+            }
 
             return {
                 ...a,
                 gpa,
-                fortyYard: prFor('forty_yard'),
-                bench: prFor('bench_press_1rm'),
-                squat: prFor('squat_1rm'),
-                vertical: prFor('vertical_jump'),
+                fortyYard: metrics.fortyYard,
+                bench: metrics.bench,
+                squat: metrics.squat,
+                vertical: metrics.vertical,
             }
         })
 
